@@ -1,0 +1,264 @@
+# Data lineage — kontrak produk hidup (dataset-level).
+# Sumber kebenaran. Ubah hanya jika graf kontrak berubah, lalu:
+#   python docs/lineage/generate.py
+# Commit catalog.yaml + index.html bersama.
+
+datasets:
+  # ── Spine ──────────────────────────────────────────────────────────
+  - id: daily_stock_summary
+    status: live
+    producers:
+      - { type: dag, id: stock_data_ingestion }
+    consumers:
+      - { type: dag, id: data_transformation }
+      - { type: dag, id: bukti_peluang_ml_daily }
+      - { type: dag, id: bukti_peluang_ml_weekly_train }
+      - { type: dag, id: pita_ma_daily }
+      - { type: dag, id: fbup_daily }
+      - { type: dag, id: belum_dihargai_daily }
+      - { type: dag, id: nilai_wajar_daily }
+      - { type: dag, id: deep_pullback_daily }
+      - { type: dag, id: vol_spike_watch_daily }
+      - { type: dag, id: long_base_grad_daily }
+      - { type: dag, id: korpus_episode_daily }
+      - { type: dag, id: chart_pattern_shadow_daily }
+      - { type: dag, id: ihsg_ohlcv_ingestion }
+      - { type: dag, id: idx_scanner_tvkit_daily }
+      - { type: dag, id: idx_fundamentals_tvkit_weekly }
+      - { type: dag, id: reporting_and_alerting }
+      - { type: dag, id: rebound_prediction }
+      - { type: dag, id: daily_telegram_digests }
+      - { type: dag, id: momentum_fast_signals }
+      - { type: dag, id: near_high60_break }
+      - { type: dag, id: relaxed_breakout_detector }
+      - { type: api, id: /api/v1/overview }
+      - { type: api, id: /api/v1/today-summary }
+      - { type: api, id: /api/v1/stocks }
+      - { type: api, id: /api/v1/stocks/detail }
+      - { type: api, id: /api/v1/stocks/timeseries }
+      - { type: api, id: /api/v1/stocks/bandarmology }
+      - { type: api, id: /api/v1/stocks/technical }
+      - { type: api, id: /api/v1/stocks/analytics }
+      - { type: api, id: /api/v1/stocks/adline }
+      - { type: api, id: /api/v1/stocks/adline-rankings }
+      - { type: api, id: /api/v1/stocks/early-uptrend }
+      - { type: api, id: /api/v1/stocks/pre-rally }
+      - { type: api, id: /api/v1/stocks/ma-coiling }
+      - { type: api, id: /api/v1/stocks/smart-money }
+      - { type: api, id: /api/v1/opportunities }
+      - { type: api, id: /api/v1/peluang/value-spike }
+      - { type: api, id: /api/v1/foreign-flow }
+      - { type: api, id: /api/v1/foreign-flow/sleeping-giants }
+      - { type: api, id: /api/v1/foreign-flow/accumulation }
+      - { type: api, id: /api/v1/foreign-flow/validation }
+      - { type: api, id: /api/v1/accumulation-signals }
+      - { type: api, id: /api/v1/portfolio }
+      - { type: api, id: /api/v1/market/ihsg }
+      - { type: telegram, id: accumulation }
+      - { type: telegram, id: breakout }
+    notes: >
+      Spine OHLCV harian IDX. Hampir semua pipeline dan surface produk membaca ini.
+
+  - id: dim_companies
+    status: live
+    producers:
+      - { type: dag, id: stock_data_ingestion }
+      - { type: dag, id: idx_sectors_tvkit_weekly }
+    consumers:
+      - { type: api, id: /api/v1/overview }
+      - { type: api, id: /api/v1/chart-pattern-shadow }
+    notes: >
+      Simbol/nama dari ingestion; sector/industry dari tvkit mingguan.
+      Bukan public_core.dim_companies (dbt/transform).
+
+  - id: ihsg_ohlcv
+    status: live
+    producers:
+      - { type: dag, id: ihsg_ohlcv_ingestion }
+    consumers:
+      - { type: dag, id: fbup_daily }
+      - { type: dag, id: ready_besok_daily }
+      - { type: dag, id: belum_dihargai_daily }
+      - { type: dag, id: korpus_episode_daily }
+      - { type: api, id: /api/v1/market/ihsg }
+      - { type: api, id: /api/v1/peluang }
+    notes: Rejim pasar IHSG (1D/intraday). Dipakai Siap Tindak dan FBUP.
+
+  - id: idx_trading_calendar
+    status: live
+    producers:
+      - { type: dag, id: data_transformation }
+    consumers:
+      - { type: dag, id: data_transformation }
+    notes: Kalender sesi. Hanya dibaca untuk materialisasi stock_ohlcv_weekly.
+
+  - id: stock_ohlcv_weekly
+    status: live
+    producers:
+      - { type: dag, id: data_transformation }
+    consumers:
+      - { type: dag, id: pita_ma_daily }
+      - { type: dag, id: fbup_daily }
+      - { type: dag, id: bukti_peluang_ml_daily }
+      - { type: dag, id: bukti_peluang_ml_weekly_train }
+      - { type: api, id: /api/v1/stocks/timeseries }
+    notes: Candle 1W tertutup. Jangan diganti resample ad-hoc di consumer.
+
+  - id: intraday_stock_bars
+    status: live
+    producers:
+      - { type: dag, id: ihsg_ohlcv_ingestion }
+    consumers:
+      - { type: dag, id: pita_ma_daily }
+      - { type: api, id: /api/v1/stocks/timeseries }
+    notes: Bar 5M/30M/1H emiten. Radar 1H membaca ini.
+
+  - id: fundamental_metric
+    status: live
+    producers:
+      - { type: dag, id: idx_scanner_tvkit_daily }
+      - { type: dag, id: idx_fundamentals_tvkit_weekly }
+    consumers:
+      - { type: dag, id: nilai_wajar_daily }
+      - { type: dag, id: belum_dihargai_daily }
+      - { type: api, id: /api/v1/overview }
+      - { type: api, id: /api/v1/stocks/analytics }
+      - { type: api, id: /api/v1/stocks/dividends }
+    notes: Snapshot metrik + dividen (ADR-0008). Bukan riwayat pembayaran per-acara.
+
+  # ── Peluang ────────────────────────────────────────────────────────
+  - id: setup_snapshot
+    status: live
+    producers:
+      - { type: dag, id: bukti_peluang_ml_daily }
+      - { type: dag, id: bukti_peluang_ml_weekly_train }
+    consumers:
+      - { type: dag, id: belum_dihargai_daily }
+      - { type: api, id: /api/v1/peluang }
+      - { type: api, id: /api/v1/peluang/emiten }
+      - { type: telegram, id: breakout }
+    notes: >
+      Fase Setup + Zona Entry + Invalidasi + Terlambat. Jangan dihitung ulang di API.
+      Peluang Berlapis tidak menulis atau mengubah tabel ini.
+
+  - id: peluang_feature_store
+    status: live
+    producers:
+      - { type: dag, id: bukti_peluang_ml_daily }
+      - { type: dag, id: bukti_peluang_ml_weekly_train }
+    consumers:
+      - { type: api, id: /api/v1/peluang }
+      - { type: api, id: /api/v1/overview }
+    notes: Fitur Pilar Peluang. Skor Peluang di API, bukan di pipeline lain.
+
+  - id: bukti_peluang_ml
+    status: live
+    producers:
+      - { type: dag, id: bukti_peluang_ml_daily }
+      - { type: dag, id: bukti_peluang_ml_weekly_train }
+    consumers:
+      - { type: dag, id: peluang_berlapis_daily }
+      - { type: api, id: /api/v1/peluang }
+      - { type: api, id: /api/v1/peluang/emiten }
+      - { type: telegram, id: breakout }
+    notes: >
+      Expected R + bukti ML. Wajib untuk Siap Tindak. Ranking Peluang memakai ini,
+      bukan Skor Peluang.
+
+  # ── Produk hidup ───────────────────────────────────────────────────
+  - id: pita_ma_snapshot
+    status: live
+    producers:
+      - { type: dag, id: pita_ma_daily }
+    consumers:
+      - { type: dag, id: peluang_berlapis_daily }
+      - { type: dag, id: ready_besok_daily }
+      - { type: api, id: /api/v1/radar-momentum }
+    notes: >
+      Radar Momentum (pita_ma_v3, multi-TF). Jangan campur ke ranking Peluang.
+      Badge Berlapis 1D-only.
+
+  - id: fbup_snapshot
+    status: live
+    producers:
+      - { type: dag, id: fbup_daily }
+    consumers:
+      - { type: api, id: /api/v1/peluang/fbup }
+      - { type: telegram, id: accumulation }
+    notes: FBUP-v2. Menggantikan akumulasi_snapshot. Tab Peluang, bukan Radar.
+
+  - id: peluang_berlapis_snapshot
+    status: live
+    producers:
+      - { type: dag, id: peluang_berlapis_daily }
+    consumers:
+      - { type: dag, id: ready_besok_daily }
+      - { type: api, id: /api/v1/peluang-2 }
+    notes: >
+      Cascade /peluang-2. Tidak mengubah setup_snapshot, Siap Tindak, atau Telegram Peluang.
+
+  - id: ready_besok_snapshot
+    status: live
+    producers:
+      - { type: dag, id: ready_besok_daily }
+    consumers:
+      - { type: api, id: /api/v1/peluang-2 }
+    notes: Subset MA Ketat + gerbang Siap Tindak. Bukan Telegram. Bukan Siap Tindak di /peluang.
+
+  - id: nilai_wajar_snapshot
+    status: live
+    producers:
+      - { type: dag, id: nilai_wajar_daily }
+    consumers:
+      - { type: api, id: /api/v1/nilai-wajar }
+    notes: Screener Nilai Wajar. Riset Emiten menghitung live dari analytics, bukan tabel ini.
+
+  - id: belum_dihargai_snapshot
+    status: live
+    producers:
+      - { type: dag, id: belum_dihargai_daily }
+    consumers:
+      - { type: api, id: /api/v1/belum-dihargai }
+    notes: Surface sendiri. Tidak masuk Telegram.
+
+  - id: deep_pullback_snapshot
+    status: live
+    producers:
+      - { type: dag, id: deep_pullback_daily }
+    consumers:
+      - { type: api, id: /api/v1/peluang/deep-pullback }
+      - { type: telegram, id: accumulation }
+
+  - id: vol_spike_watch_snapshot
+    status: live
+    producers:
+      - { type: dag, id: vol_spike_watch_daily }
+    consumers:
+      - { type: telegram, id: accumulation }
+    notes: Early-warning. Tidak ada route API tetap.
+
+  - id: long_base_grad_snapshot
+    status: live
+    producers:
+      - { type: dag, id: long_base_grad_daily }
+    consumers:
+      - { type: telegram, id: accumulation }
+    notes: Layer-2 base ≥6 bulan. Tidak ada route API tetap.
+
+  - id: korpus_episode
+    status: live
+    producers:
+      - { type: dag, id: korpus_episode_daily }
+    consumers:
+      - { type: api, id: /api/v1/korpus-episode }
+    notes: >
+      Riset ADR-0022/0023. Bukan Peluang, bukan Radar, bukan Telegram.
+      Jangan di-merge diam-diam ke alert produksi.
+
+  - id: chart_pattern_shadow_snapshot
+    status: shadow
+    producers:
+      - { type: dag, id: chart_pattern_shadow_daily }
+    consumers:
+      - { type: api, id: /api/v1/chart-pattern-shadow }
+    notes: Shadow DB+IHS. Bukan sinyal beli. Bukan Telegram.

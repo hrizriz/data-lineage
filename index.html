@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Data lineage — kontrak produk hidup</title>
+  <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a2f;
+      --border: #24304f;
+      --text: #e8edf7;
+      --muted: #8b97b3;
+      --dataset: #f5c16c;
+      --dataset-shadow: #c4a36a;
+      --dag: #5b9cff;
+      --api: #3ecf8e;
+      --telegram: #c084fc;
+      --edge-write: #7d8aa8;
+      --edge-read: #4a556e;
+      --hot: #ff6b4a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif; }
+    header {
+      display: flex; align-items: center; gap: 16px;
+      padding: 10px 16px; border-bottom: 1px solid var(--border);
+      background: #0d1426;
+    }
+    header h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: .02em; }
+    header input {
+      margin-left: auto; width: 280px; background: var(--panel); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font-size: 13px;
+    }
+    header button {
+      background: transparent; color: var(--muted); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 12px;
+    }
+    header button:hover { color: var(--text); }
+    .layout { display: flex; height: calc(100% - 52px); }
+    #graph { flex: 1; min-width: 0; }
+    aside {
+      width: 340px; border-left: 1px solid var(--border); background: var(--panel);
+      padding: 14px 16px; overflow: auto; font-size: 13px;
+    }
+    aside h2 { font-size: 13px; margin: 0 0 6px; color: var(--dataset); }
+    aside .kind { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    aside .notes { color: var(--muted); margin: 8px 0 14px; line-height: 1.45; }
+    aside h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+      color: var(--muted); margin: 16px 0 6px; }
+    aside ul { list-style: none; padding: 0; margin: 0; }
+    aside li { padding: 4px 0; border-bottom: 1px solid #1b243c; cursor: pointer; }
+    aside li:hover { color: var(--dataset); }
+    .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; font-size: 11px; color: var(--muted); }
+    .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+    .empty { color: var(--muted); margin-top: 24px; line-height: 1.5; }
+    .count { color: var(--hot); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Data lineage</h1>
+    <input id="search" type="search" placeholder="Cari dataset / DAG / API…" />
+    <button type="button" id="clear">Clear</button>
+  </header>
+  <div class="layout">
+    <div id="graph"></div>
+    <aside id="panel">
+      <div class="empty">Klik sebuah titik. Hilir transitif dan hulu langsung akan menyala.</div>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--dataset)"></i>dataset</span>
+        <span><i class="swatch" style="background:var(--dag)"></i>DAG</span>
+        <span><i class="swatch" style="background:var(--api)"></i>API</span>
+        <span><i class="swatch" style="background:var(--telegram)"></i>Telegram</span>
+      </div>
+    </aside>
+  </div>
+  <script>
+    const GRAPH = {"nodes": [{"id": "dataset:daily_stock_summary", "kind": "dataset", "label": "daily_stock_summary", "status": "live", "notes": "Spine OHLCV harian IDX. Hampir semua pipeline dan surface produk membaca ini."}, {"id": "dag:stock_data_ingestion", "kind": "dag", "label": "stock_data_ingestion", "status": ""}, {"id": "dag:data_transformation", "kind": "dag", "label": "data_transformation", "status": ""}, {"id": "dag:bukti_peluang_ml_daily", "kind": "dag", "label": "bukti_peluang_ml_daily", "status": ""}, {"id": "dag:bukti_peluang_ml_weekly_train", "kind": "dag", "label": "bukti_peluang_ml_weekly_train", "status": ""}, {"id": "dag:pita_ma_daily", "kind": "dag", "label": "pita_ma_daily", "status": ""}, {"id": "dag:fbup_daily", "kind": "dag", "label": "fbup_daily", "status": ""}, {"id": "dag:belum_dihargai_daily", "kind": "dag", "label": "belum_dihargai_daily", "status": ""}, {"id": "dag:nilai_wajar_daily", "kind": "dag", "label": "nilai_wajar_daily", "status": ""}, {"id": "dag:deep_pullback_daily", "kind": "dag", "label": "deep_pullback_daily", "status": ""}, {"id": "dag:vol_spike_watch_daily", "kind": "dag", "label": "vol_spike_watch_daily", "status": ""}, {"id": "dag:long_base_grad_daily", "kind": "dag", "label": "long_base_grad_daily", "status": ""}, {"id": "dag:korpus_episode_daily", "kind": "dag", "label": "korpus_episode_daily", "status": ""}, {"id": "dag:chart_pattern_shadow_daily", "kind": "dag", "label": "chart_pattern_shadow_daily", "status": ""}, {"id": "dag:ihsg_ohlcv_ingestion", "kind": "dag", "label": "ihsg_ohlcv_ingestion", "status": ""}, {"id": "dag:idx_scanner_tvkit_daily", "kind": "dag", "label": "idx_scanner_tvkit_daily", "status": ""}, {"id": "dag:idx_fundamentals_tvkit_weekly", "kind": "dag", "label": "idx_fundamentals_tvkit_weekly", "status": ""}, {"id": "dag:reporting_and_alerting", "kind": "dag", "label": "reporting_and_alerting", "status": ""}, {"id": "dag:rebound_prediction", "kind": "dag", "label": "rebound_prediction", "status": ""}, {"id": "dag:daily_telegram_digests", "kind": "dag", "label": "daily_telegram_digests", "status": ""}, {"id": "dag:momentum_fast_signals", "kind": "dag", "label": "momentum_fast_signals", "status": ""}, {"id": "dag:near_high60_break", "kind": "dag", "label": "near_high60_break", "status": ""}, {"id": "dag:relaxed_breakout_detector", "kind": "dag", "label": "relaxed_breakout_detector", "status": ""}, {"id": "api:/api/v1/overview", "kind": "api", "label": "/api/v1/overview", "status": ""}, {"id": "api:/api/v1/today-summary", "kind": "api", "label": "/api/v1/today-summary", "status": ""}, {"id": "api:/api/v1/stocks", "kind": "api", "label": "/api/v1/stocks", "status": ""}, {"id": "api:/api/v1/stocks/detail", "kind": "api", "label": "/api/v1/stocks/detail", "status": ""}, {"id": "api:/api/v1/stocks/timeseries", "kind": "api", "label": "/api/v1/stocks/timeseries", "status": ""}, {"id": "api:/api/v1/stocks/bandarmology", "kind": "api", "label": "/api/v1/stocks/bandarmology", "status": ""}, {"id": "api:/api/v1/stocks/technical", "kind": "api", "label": "/api/v1/stocks/technical", "status": ""}, {"id": "api:/api/v1/stocks/analytics", "kind": "api", "label": "/api/v1/stocks/analytics", "status": ""}, {"id": "api:/api/v1/stocks/adline", "kind": "api", "label": "/api/v1/stocks/adline", "status": ""}, {"id": "api:/api/v1/stocks/adline-rankings", "kind": "api", "label": "/api/v1/stocks/adline-rankings", "status": ""}, {"id": "api:/api/v1/stocks/early-uptrend", "kind": "api", "label": "/api/v1/stocks/early-uptrend", "status": ""}, {"id": "api:/api/v1/stocks/pre-rally", "kind": "api", "label": "/api/v1/stocks/pre-rally", "status": ""}, {"id": "api:/api/v1/stocks/ma-coiling", "kind": "api", "label": "/api/v1/stocks/ma-coiling", "status": ""}, {"id": "api:/api/v1/stocks/smart-money", "kind": "api", "label": "/api/v1/stocks/smart-money", "status": ""}, {"id": "api:/api/v1/opportunities", "kind": "api", "label": "/api/v1/opportunities", "status": ""}, {"id": "api:/api/v1/peluang/value-spike", "kind": "api", "label": "/api/v1/peluang/value-spike", "status": ""}, {"id": "api:/api/v1/foreign-flow", "kind": "api", "label": "/api/v1/foreign-flow", "status": ""}, {"id": "api:/api/v1/foreign-flow/sleeping-giants", "kind": "api", "label": "/api/v1/foreign-flow/sleeping-giants", "status": ""}, {"id": "api:/api/v1/foreign-flow/accumulation", "kind": "api", "label": "/api/v1/foreign-flow/accumulation", "status": ""}, {"id": "api:/api/v1/foreign-flow/validation", "kind": "api", "label": "/api/v1/foreign-flow/validation", "status": ""}, {"id": "api:/api/v1/accumulation-signals", "kind": "api", "label": "/api/v1/accumulation-signals", "status": ""}, {"id": "api:/api/v1/portfolio", "kind": "api", "label": "/api/v1/portfolio", "status": ""}, {"id": "api:/api/v1/market/ihsg", "kind": "api", "label": "/api/v1/market/ihsg", "status": ""}, {"id": "telegram:accumulation", "kind": "telegram", "label": "accumulation", "status": ""}, {"id": "telegram:breakout", "kind": "telegram", "label": "breakout", "status": ""}, {"id": "dataset:dim_companies", "kind": "dataset", "label": "dim_companies", "status": "live", "notes": "Simbol/nama dari ingestion; sector/industry dari tvkit mingguan. Bukan public_core.dim_companies (dbt/transform)."}, {"id": "dag:idx_sectors_tvkit_weekly", "kind": "dag", "label": "idx_sectors_tvkit_weekly", "status": ""}, {"id": "api:/api/v1/chart-pattern-shadow", "kind": "api", "label": "/api/v1/chart-pattern-shadow", "status": ""}, {"id": "dataset:ihsg_ohlcv", "kind": "dataset", "label": "ihsg_ohlcv", "status": "live", "notes": "Rejim pasar IHSG (1D/intraday). Dipakai Siap Tindak dan FBUP."}, {"id": "dag:ready_besok_daily", "kind": "dag", "label": "ready_besok_daily", "status": ""}, {"id": "api:/api/v1/peluang", "kind": "api", "label": "/api/v1/peluang", "status": ""}, {"id": "dataset:idx_trading_calendar", "kind": "dataset", "label": "idx_trading_calendar", "status": "live", "notes": "Kalender sesi. Hanya dibaca untuk materialisasi stock_ohlcv_weekly."}, {"id": "dataset:stock_ohlcv_weekly", "kind": "dataset", "label": "stock_ohlcv_weekly", "status": "live", "notes": "Candle 1W tertutup. Jangan diganti resample ad-hoc di consumer."}, {"id": "dataset:intraday_stock_bars", "kind": "dataset", "label": "intraday_stock_bars", "status": "live", "notes": "Bar 5M/30M/1H emiten. Radar 1H membaca ini."}, {"id": "dataset:fundamental_metric", "kind": "dataset", "label": "fundamental_metric", "status": "live", "notes": "Snapshot metrik + dividen (ADR-0008). Bukan riwayat pembayaran per-acara."}, {"id": "api:/api/v1/stocks/dividends", "kind": "api", "label": "/api/v1/stocks/dividends", "status": ""}, {"id": "dataset:setup_snapshot", "kind": "dataset", "label": "setup_snapshot", "status": "live", "notes": "Fase Setup + Zona Entry + Invalidasi + Terlambat. Jangan dihitung ulang di API. Peluang Berlapis tidak menulis atau mengubah tabel ini."}, {"id": "api:/api/v1/peluang/emiten", "kind": "api", "label": "/api/v1/peluang/emiten", "status": ""}, {"id": "dataset:peluang_feature_store", "kind": "dataset", "label": "peluang_feature_store", "status": "live", "notes": "Fitur Pilar Peluang. Skor Peluang di API, bukan di pipeline lain."}, {"id": "dataset:bukti_peluang_ml", "kind": "dataset", "label": "bukti_peluang_ml", "status": "live", "notes": "Expected R + bukti ML. Wajib untuk Siap Tindak. Ranking Peluang memakai ini, bukan Skor Peluang."}, {"id": "dag:peluang_berlapis_daily", "kind": "dag", "label": "peluang_berlapis_daily", "status": ""}, {"id": "dataset:pita_ma_snapshot", "kind": "dataset", "label": "pita_ma_snapshot", "status": "live", "notes": "Radar Momentum (pita_ma_v3, multi-TF). Jangan campur ke ranking Peluang. Badge Berlapis 1D-only."}, {"id": "api:/api/v1/radar-momentum", "kind": "api", "label": "/api/v1/radar-momentum", "status": ""}, {"id": "dataset:fbup_snapshot", "kind": "dataset", "label": "fbup_snapshot", "status": "live", "notes": "FBUP-v2. Menggantikan akumulasi_snapshot. Tab Peluang, bukan Radar."}, {"id": "api:/api/v1/peluang/fbup", "kind": "api", "label": "/api/v1/peluang/fbup", "status": ""}, {"id": "dataset:peluang_berlapis_snapshot", "kind": "dataset", "label": "peluang_berlapis_snapshot", "status": "live", "notes": "Cascade /peluang-2. Tidak mengubah setup_snapshot, Siap Tindak, atau Telegram Peluang."}, {"id": "api:/api/v1/peluang-2", "kind": "api", "label": "/api/v1/peluang-2", "status": ""}, {"id": "dataset:ready_besok_snapshot", "kind": "dataset", "label": "ready_besok_snapshot", "status": "live", "notes": "Subset MA Ketat + gerbang Siap Tindak. Bukan Telegram. Bukan Siap Tindak di /peluang."}, {"id": "dataset:nilai_wajar_snapshot", "kind": "dataset", "label": "nilai_wajar_snapshot", "status": "live", "notes": "Screener Nilai Wajar. Riset Emiten menghitung live dari analytics, bukan tabel ini."}, {"id": "api:/api/v1/nilai-wajar", "kind": "api", "label": "/api/v1/nilai-wajar", "status": ""}, {"id": "dataset:belum_dihargai_snapshot", "kind": "dataset", "label": "belum_dihargai_snapshot", "status": "live", "notes": "Surface sendiri. Tidak masuk Telegram."}, {"id": "api:/api/v1/belum-dihargai", "kind": "api", "label": "/api/v1/belum-dihargai", "status": ""}, {"id": "dataset:deep_pullback_snapshot", "kind": "dataset", "label": "deep_pullback_snapshot", "status": "live", "notes": ""}, {"id": "api:/api/v1/peluang/deep-pullback", "kind": "api", "label": "/api/v1/peluang/deep-pullback", "status": ""}, {"id": "dataset:vol_spike_watch_snapshot", "kind": "dataset", "label": "vol_spike_watch_snapshot", "status": "live", "notes": "Early-warning. Tidak ada route API tetap."}, {"id": "dataset:long_base_grad_snapshot", "kind": "dataset", "label": "long_base_grad_snapshot", "status": "live", "notes": "Layer-2 base ≥6 bulan. Tidak ada route API tetap."}, {"id": "dataset:korpus_episode", "kind": "dataset", "label": "korpus_episode", "status": "live", "notes": "Riset ADR-0022/0023. Bukan Peluang, bukan Radar, bukan Telegram. Jangan di-merge diam-diam ke alert produksi."}, {"id": "api:/api/v1/korpus-episode", "kind": "api", "label": "/api/v1/korpus-episode", "status": ""}, {"id": "dataset:chart_pattern_shadow_snapshot", "kind": "dataset", "label": "chart_pattern_shadow_snapshot", "status": "shadow", "notes": "Shadow DB+IHS. Bukan sinyal beli. Bukan Telegram."}], "edges": [{"from": "dag:stock_data_ingestion", "to": "dataset:daily_stock_summary", "rel": "writes"}, {"from": "dataset:daily_stock_summary", "to": "dag:data_transformation", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:bukti_peluang_ml_daily", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:bukti_peluang_ml_weekly_train", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:pita_ma_daily", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:fbup_daily", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:belum_dihargai_daily", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:nilai_wajar_daily", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:deep_pullback_daily", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:vol_spike_watch_daily", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:long_base_grad_daily", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:korpus_episode_daily", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:chart_pattern_shadow_daily", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:ihsg_ohlcv_ingestion", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:idx_scanner_tvkit_daily", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:idx_fundamentals_tvkit_weekly", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:reporting_and_alerting", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:rebound_prediction", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:daily_telegram_digests", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:momentum_fast_signals", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:near_high60_break", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "dag:relaxed_breakout_detector", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/overview", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/today-summary", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/stocks", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/stocks/detail", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/stocks/timeseries", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/stocks/bandarmology", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/stocks/technical", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/stocks/analytics", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/stocks/adline", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/stocks/adline-rankings", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/stocks/early-uptrend", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/stocks/pre-rally", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/stocks/ma-coiling", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/stocks/smart-money", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/opportunities", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/peluang/value-spike", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/foreign-flow", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/foreign-flow/sleeping-giants", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/foreign-flow/accumulation", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/foreign-flow/validation", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/accumulation-signals", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/portfolio", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "api:/api/v1/market/ihsg", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "telegram:accumulation", "rel": "reads"}, {"from": "dataset:daily_stock_summary", "to": "telegram:breakout", "rel": "reads"}, {"from": "dag:stock_data_ingestion", "to": "dataset:dim_companies", "rel": "writes"}, {"from": "dag:idx_sectors_tvkit_weekly", "to": "dataset:dim_companies", "rel": "writes"}, {"from": "dataset:dim_companies", "to": "api:/api/v1/overview", "rel": "reads"}, {"from": "dataset:dim_companies", "to": "api:/api/v1/chart-pattern-shadow", "rel": "reads"}, {"from": "dag:ihsg_ohlcv_ingestion", "to": "dataset:ihsg_ohlcv", "rel": "writes"}, {"from": "dataset:ihsg_ohlcv", "to": "dag:fbup_daily", "rel": "reads"}, {"from": "dataset:ihsg_ohlcv", "to": "dag:ready_besok_daily", "rel": "reads"}, {"from": "dataset:ihsg_ohlcv", "to": "dag:belum_dihargai_daily", "rel": "reads"}, {"from": "dataset:ihsg_ohlcv", "to": "dag:korpus_episode_daily", "rel": "reads"}, {"from": "dataset:ihsg_ohlcv", "to": "api:/api/v1/market/ihsg", "rel": "reads"}, {"from": "dataset:ihsg_ohlcv", "to": "api:/api/v1/peluang", "rel": "reads"}, {"from": "dag:data_transformation", "to": "dataset:idx_trading_calendar", "rel": "writes"}, {"from": "dataset:idx_trading_calendar", "to": "dag:data_transformation", "rel": "reads"}, {"from": "dag:data_transformation", "to": "dataset:stock_ohlcv_weekly", "rel": "writes"}, {"from": "dataset:stock_ohlcv_weekly", "to": "dag:pita_ma_daily", "rel": "reads"}, {"from": "dataset:stock_ohlcv_weekly", "to": "dag:fbup_daily", "rel": "reads"}, {"from": "dataset:stock_ohlcv_weekly", "to": "dag:bukti_peluang_ml_daily", "rel": "reads"}, {"from": "dataset:stock_ohlcv_weekly", "to": "dag:bukti_peluang_ml_weekly_train", "rel": "reads"}, {"from": "dataset:stock_ohlcv_weekly", "to": "api:/api/v1/stocks/timeseries", "rel": "reads"}, {"from": "dag:ihsg_ohlcv_ingestion", "to": "dataset:intraday_stock_bars", "rel": "writes"}, {"from": "dataset:intraday_stock_bars", "to": "dag:pita_ma_daily", "rel": "reads"}, {"from": "dataset:intraday_stock_bars", "to": "api:/api/v1/stocks/timeseries", "rel": "reads"}, {"from": "dag:idx_scanner_tvkit_daily", "to": "dataset:fundamental_metric", "rel": "writes"}, {"from": "dag:idx_fundamentals_tvkit_weekly", "to": "dataset:fundamental_metric", "rel": "writes"}, {"from": "dataset:fundamental_metric", "to": "dag:nilai_wajar_daily", "rel": "reads"}, {"from": "dataset:fundamental_metric", "to": "dag:belum_dihargai_daily", "rel": "reads"}, {"from": "dataset:fundamental_metric", "to": "api:/api/v1/overview", "rel": "reads"}, {"from": "dataset:fundamental_metric", "to": "api:/api/v1/stocks/analytics", "rel": "reads"}, {"from": "dataset:fundamental_metric", "to": "api:/api/v1/stocks/dividends", "rel": "reads"}, {"from": "dag:bukti_peluang_ml_daily", "to": "dataset:setup_snapshot", "rel": "writes"}, {"from": "dag:bukti_peluang_ml_weekly_train", "to": "dataset:setup_snapshot", "rel": "writes"}, {"from": "dataset:setup_snapshot", "to": "dag:belum_dihargai_daily", "rel": "reads"}, {"from": "dataset:setup_snapshot", "to": "api:/api/v1/peluang", "rel": "reads"}, {"from": "dataset:setup_snapshot", "to": "api:/api/v1/peluang/emiten", "rel": "reads"}, {"from": "dataset:setup_snapshot", "to": "telegram:breakout", "rel": "reads"}, {"from": "dag:bukti_peluang_ml_daily", "to": "dataset:peluang_feature_store", "rel": "writes"}, {"from": "dag:bukti_peluang_ml_weekly_train", "to": "dataset:peluang_feature_store", "rel": "writes"}, {"from": "dataset:peluang_feature_store", "to": "api:/api/v1/peluang", "rel": "reads"}, {"from": "dataset:peluang_feature_store", "to": "api:/api/v1/overview", "rel": "reads"}, {"from": "dag:bukti_peluang_ml_daily", "to": "dataset:bukti_peluang_ml", "rel": "writes"}, {"from": "dag:bukti_peluang_ml_weekly_train", "to": "dataset:bukti_peluang_ml", "rel": "writes"}, {"from": "dataset:bukti_peluang_ml", "to": "dag:peluang_berlapis_daily", "rel": "reads"}, {"from": "dataset:bukti_peluang_ml", "to": "api:/api/v1/peluang", "rel": "reads"}, {"from": "dataset:bukti_peluang_ml", "to": "api:/api/v1/peluang/emiten", "rel": "reads"}, {"from": "dataset:bukti_peluang_ml", "to": "telegram:breakout", "rel": "reads"}, {"from": "dag:pita_ma_daily", "to": "dataset:pita_ma_snapshot", "rel": "writes"}, {"from": "dataset:pita_ma_snapshot", "to": "dag:peluang_berlapis_daily", "rel": "reads"}, {"from": "dataset:pita_ma_snapshot", "to": "dag:ready_besok_daily", "rel": "reads"}, {"from": "dataset:pita_ma_snapshot", "to": "api:/api/v1/radar-momentum", "rel": "reads"}, {"from": "dag:fbup_daily", "to": "dataset:fbup_snapshot", "rel": "writes"}, {"from": "dataset:fbup_snapshot", "to": "api:/api/v1/peluang/fbup", "rel": "reads"}, {"from": "dataset:fbup_snapshot", "to": "telegram:accumulation", "rel": "reads"}, {"from": "dag:peluang_berlapis_daily", "to": "dataset:peluang_berlapis_snapshot", "rel": "writes"}, {"from": "dataset:peluang_berlapis_snapshot", "to": "dag:ready_besok_daily", "rel": "reads"}, {"from": "dataset:peluang_berlapis_snapshot", "to": "api:/api/v1/peluang-2", "rel": "reads"}, {"from": "dag:ready_besok_daily", "to": "dataset:ready_besok_snapshot", "rel": "writes"}, {"from": "dataset:ready_besok_snapshot", "to": "api:/api/v1/peluang-2", "rel": "reads"}, {"from": "dag:nilai_wajar_daily", "to": "dataset:nilai_wajar_snapshot", "rel": "writes"}, {"from": "dataset:nilai_wajar_snapshot", "to": "api:/api/v1/nilai-wajar", "rel": "reads"}, {"from": "dag:belum_dihargai_daily", "to": "dataset:belum_dihargai_snapshot", "rel": "writes"}, {"from": "dataset:belum_dihargai_snapshot", "to": "api:/api/v1/belum-dihargai", "rel": "reads"}, {"from": "dag:deep_pullback_daily", "to": "dataset:deep_pullback_snapshot", "rel": "writes"}, {"from": "dataset:deep_pullback_snapshot", "to": "api:/api/v1/peluang/deep-pullback", "rel": "reads"}, {"from": "dataset:deep_pullback_snapshot", "to": "telegram:accumulation", "rel": "reads"}, {"from": "dag:vol_spike_watch_daily", "to": "dataset:vol_spike_watch_snapshot", "rel": "writes"}, {"from": "dataset:vol_spike_watch_snapshot", "to": "telegram:accumulation", "rel": "reads"}, {"from": "dag:long_base_grad_daily", "to": "dataset:long_base_grad_snapshot", "rel": "writes"}, {"from": "dataset:long_base_grad_snapshot", "to": "telegram:accumulation", "rel": "reads"}, {"from": "dag:korpus_episode_daily", "to": "dataset:korpus_episode", "rel": "writes"}, {"from": "dataset:korpus_episode", "to": "api:/api/v1/korpus-episode", "rel": "reads"}, {"from": "dag:chart_pattern_shadow_daily", "to": "dataset:chart_pattern_shadow_snapshot", "rel": "writes"}, {"from": "dataset:chart_pattern_shadow_snapshot", "to": "api:/api/v1/chart-pattern-shadow", "rel": "reads"}], "writes": {"dag:stock_data_ingestion": ["dataset:daily_stock_summary", "dataset:dim_companies"], "dag:idx_sectors_tvkit_weekly": ["dataset:dim_companies"], "dag:ihsg_ohlcv_ingestion": ["dataset:ihsg_ohlcv", "dataset:intraday_stock_bars"], "dag:data_transformation": ["dataset:idx_trading_calendar", "dataset:stock_ohlcv_weekly"], "dag:idx_scanner_tvkit_daily": ["dataset:fundamental_metric"], "dag:idx_fundamentals_tvkit_weekly": ["dataset:fundamental_metric"], "dag:bukti_peluang_ml_daily": ["dataset:setup_snapshot", "dataset:peluang_feature_store", "dataset:bukti_peluang_ml"], "dag:bukti_peluang_ml_weekly_train": ["dataset:setup_snapshot", "dataset:peluang_feature_store", "dataset:bukti_peluang_ml"], "dag:pita_ma_daily": ["dataset:pita_ma_snapshot"], "dag:fbup_daily": ["dataset:fbup_snapshot"], "dag:peluang_berlapis_daily": ["dataset:peluang_berlapis_snapshot"], "dag:ready_besok_daily": ["dataset:ready_besok_snapshot"], "dag:nilai_wajar_daily": ["dataset:nilai_wajar_snapshot"], "dag:belum_dihargai_daily": ["dataset:belum_dihargai_snapshot"], "dag:deep_pullback_daily": ["dataset:deep_pullback_snapshot"], "dag:vol_spike_watch_daily": ["dataset:vol_spike_watch_snapshot"], "dag:long_base_grad_daily": ["dataset:long_base_grad_snapshot"], "dag:korpus_episode_daily": ["dataset:korpus_episode"], "dag:chart_pattern_shadow_daily": ["dataset:chart_pattern_shadow_snapshot"]}, "readBy": {"dataset:daily_stock_summary": ["dag:data_transformation", "dag:bukti_peluang_ml_daily", "dag:bukti_peluang_ml_weekly_train", "dag:pita_ma_daily", "dag:fbup_daily", "dag:belum_dihargai_daily", "dag:nilai_wajar_daily", "dag:deep_pullback_daily", "dag:vol_spike_watch_daily", "dag:long_base_grad_daily", "dag:korpus_episode_daily", "dag:chart_pattern_shadow_daily", "dag:ihsg_ohlcv_ingestion", "dag:idx_scanner_tvkit_daily", "dag:idx_fundamentals_tvkit_weekly", "dag:reporting_and_alerting", "dag:rebound_prediction", "dag:daily_telegram_digests", "dag:momentum_fast_signals", "dag:near_high60_break", "dag:relaxed_breakout_detector", "api:/api/v1/overview", "api:/api/v1/today-summary", "api:/api/v1/stocks", "api:/api/v1/stocks/detail", "api:/api/v1/stocks/timeseries", "api:/api/v1/stocks/bandarmology", "api:/api/v1/stocks/technical", "api:/api/v1/stocks/analytics", "api:/api/v1/stocks/adline", "api:/api/v1/stocks/adline-rankings", "api:/api/v1/stocks/early-uptrend", "api:/api/v1/stocks/pre-rally", "api:/api/v1/stocks/ma-coiling", "api:/api/v1/stocks/smart-money", "api:/api/v1/opportunities", "api:/api/v1/peluang/value-spike", "api:/api/v1/foreign-flow", "api:/api/v1/foreign-flow/sleeping-giants", "api:/api/v1/foreign-flow/accumulation", "api:/api/v1/foreign-flow/validation", "api:/api/v1/accumulation-signals", "api:/api/v1/portfolio", "api:/api/v1/market/ihsg", "telegram:accumulation", "telegram:breakout"], "dataset:dim_companies": ["api:/api/v1/overview", "api:/api/v1/chart-pattern-shadow"], "dataset:ihsg_ohlcv": ["dag:fbup_daily", "dag:ready_besok_daily", "dag:belum_dihargai_daily", "dag:korpus_episode_daily", "api:/api/v1/market/ihsg", "api:/api/v1/peluang"], "dataset:idx_trading_calendar": ["dag:data_transformation"], "dataset:stock_ohlcv_weekly": ["dag:pita_ma_daily", "dag:fbup_daily", "dag:bukti_peluang_ml_daily", "dag:bukti_peluang_ml_weekly_train", "api:/api/v1/stocks/timeseries"], "dataset:intraday_stock_bars": ["dag:pita_ma_daily", "api:/api/v1/stocks/timeseries"], "dataset:fundamental_metric": ["dag:nilai_wajar_daily", "dag:belum_dihargai_daily", "api:/api/v1/overview", "api:/api/v1/stocks/analytics", "api:/api/v1/stocks/dividends"], "dataset:setup_snapshot": ["dag:belum_dihargai_daily", "api:/api/v1/peluang", "api:/api/v1/peluang/emiten", "telegram:breakout"], "dataset:peluang_feature_store": ["api:/api/v1/peluang", "api:/api/v1/overview"], "dataset:bukti_peluang_ml": ["dag:peluang_berlapis_daily", "api:/api/v1/peluang", "api:/api/v1/peluang/emiten", "telegram:breakout"], "dataset:pita_ma_snapshot": ["dag:peluang_berlapis_daily", "dag:ready_besok_daily", "api:/api/v1/radar-momentum"], "dataset:fbup_snapshot": ["api:/api/v1/peluang/fbup", "telegram:accumulation"], "dataset:peluang_berlapis_snapshot": ["dag:ready_besok_daily", "api:/api/v1/peluang-2"], "dataset:ready_besok_snapshot": ["api:/api/v1/peluang-2"], "dataset:nilai_wajar_snapshot": ["api:/api/v1/nilai-wajar"], "dataset:belum_dihargai_snapshot": ["api:/api/v1/belum-dihargai"], "dataset:deep_pullback_snapshot": ["api:/api/v1/peluang/deep-pullback", "telegram:accumulation"], "dataset:vol_spike_watch_snapshot": ["telegram:accumulation"], "dataset:long_base_grad_snapshot": ["telegram:accumulation"], "dataset:korpus_episode": ["api:/api/v1/korpus-episode"], "dataset:chart_pattern_shadow_snapshot": ["api:/api/v1/chart-pattern-shadow"]}, "writtenBy": {"dataset:daily_stock_summary": ["dag:stock_data_ingestion"], "dataset:dim_companies": ["dag:stock_data_ingestion", "dag:idx_sectors_tvkit_weekly"], "dataset:ihsg_ohlcv": ["dag:ihsg_ohlcv_ingestion"], "dataset:idx_trading_calendar": ["dag:data_transformation"], "dataset:stock_ohlcv_weekly": ["dag:data_transformation"], "dataset:intraday_stock_bars": ["dag:ihsg_ohlcv_ingestion"], "dataset:fundamental_metric": ["dag:idx_scanner_tvkit_daily", "dag:idx_fundamentals_tvkit_weekly"], "dataset:setup_snapshot": ["dag:bukti_peluang_ml_daily", "dag:bukti_peluang_ml_weekly_train"], "dataset:peluang_feature_store": ["dag:bukti_peluang_ml_daily", "dag:bukti_peluang_ml_weekly_train"], "dataset:bukti_peluang_ml": ["dag:bukti_peluang_ml_daily", "dag:bukti_peluang_ml_weekly_train"], "dataset:pita_ma_snapshot": ["dag:pita_ma_daily"], "dataset:fbup_snapshot": ["dag:fbup_daily"], "dataset:peluang_berlapis_snapshot": ["dag:peluang_berlapis_daily"], "dataset:ready_besok_snapshot": ["dag:ready_besok_daily"], "dataset:nilai_wajar_snapshot": ["dag:nilai_wajar_daily"], "dataset:belum_dihargai_snapshot": ["dag:belum_dihargai_daily"], "dataset:deep_pullback_snapshot": ["dag:deep_pullback_daily"], "dataset:vol_spike_watch_snapshot": ["dag:vol_spike_watch_daily"], "dataset:long_base_grad_snapshot": ["dag:long_base_grad_daily"], "dataset:korpus_episode": ["dag:korpus_episode_daily"], "dataset:chart_pattern_shadow_snapshot": ["dag:chart_pattern_shadow_daily"]}, "datasetCount": 21, "actorCount": 61};
+    const writes = GRAPH.writes || {};
+    const readBy = GRAPH.readBy || {};
+    const writtenBy = GRAPH.writtenBy || {};
+
+    const COLORS = {
+      dataset: { live: "#f5c16c", shadow: "#c4a36a" },
+      dag: "#5b9cff",
+      api: "#3ecf8e",
+      telegram: "#c084fc",
+    };
+
+    function nodeColor(n) {
+      if (n.kind === "dataset") return n.status === "shadow" ? COLORS.dataset.shadow : COLORS.dataset.live;
+      return COLORS[n.kind] || "#aaa";
+    }
+
+    const nodes = new vis.DataSet(GRAPH.nodes.map((n) => ({
+      id: n.id,
+      label: n.label,
+      title: n.kind + (n.status ? " · " + n.status : ""),
+      color: {
+        background: nodeColor(n),
+        border: nodeColor(n),
+        highlight: { background: "#fff4d6", border: "#ff6b4a" },
+      },
+      font: { color: "#e8edf7", size: n.kind === "dataset" ? 13 : 11 },
+      shape: n.kind === "dataset" ? "dot" : "dot",
+      size: n.kind === "dataset" ? 18 : 11,
+      borderWidth: n.status === "shadow" ? 3 : 1,
+      borderDashes: n.status === "shadow" ? [4, 3] : false,
+      kind: n.kind,
+      status: n.status || "",
+      notes: n.notes || "",
+    })));
+
+    const edges = new vis.DataSet(GRAPH.edges.map((e, i) => ({
+      id: "e" + i,
+      from: e.from,
+      to: e.to,
+      rel: e.rel,
+      arrows: { to: { enabled: true, scaleFactor: 0.6 } },
+      color: { color: e.rel === "writes" ? "#7d8aa8" : "#3a4563", opacity: 0.7 },
+      dashes: e.rel === "reads",
+      width: e.rel === "writes" ? 1.4 : 1,
+      smooth: { type: "continuous", roundness: 0.15 },
+    })));
+
+    const network = new vis.Network(
+      document.getElementById("graph"),
+      { nodes, edges },
+      {
+        interaction: { hover: true, tooltipDelay: 120, hideEdgesOnDrag: true },
+        physics: {
+          solver: "forceAtlas2Based",
+          forceAtlas2Based: {
+            gravitationalConstant: -42,
+            springLength: 110,
+            springConstant: 0.06,
+            avoidOverlap: 0.6,
+          },
+          stabilization: { iterations: 180 },
+        },
+        nodes: { shadow: { enabled: true, color: "rgba(0,0,0,.45)", size: 8 } },
+      }
+    );
+
+    const nodeById = Object.fromEntries(GRAPH.nodes.map((n) => [n.id, n]));
+
+    function downstreamFromDataset(dsId) {
+      const datasets = new Set([dsId]);
+      const actors = new Set();
+      const queue = [dsId];
+      while (queue.length) {
+        const d = queue.shift();
+        for (const c of readBy[d] || []) {
+          if (actors.has(c)) continue;
+          actors.add(c);
+          for (const d2 of writes[c] || []) {
+            if (!datasets.has(d2)) {
+              datasets.add(d2);
+              queue.push(d2);
+            }
+          }
+        }
+      }
+      return { datasets, actors };
+    }
+
+    function blast(id) {
+      const node = nodeById[id];
+      if (!node) return null;
+      const datasets = new Set();
+      const actors = new Set();
+      const upstream = new Set();
+
+      if (node.kind === "dataset") {
+        datasets.add(id);
+        for (const p of writtenBy[id] || []) {
+          upstream.add(p);
+          actors.add(p);
+        }
+        const down = downstreamFromDataset(id);
+        down.datasets.forEach((d) => datasets.add(d));
+        down.actors.forEach((a) => actors.add(a));
+      } else {
+        actors.add(id);
+        for (const d of writes[id] || []) {
+          datasets.add(d);
+          const down = downstreamFromDataset(d);
+          down.datasets.forEach((x) => datasets.add(x));
+          down.actors.forEach((a) => actors.add(a));
+        }
+        for (const [ds, cons] of Object.entries(readBy)) {
+          if (cons.includes(id)) {
+            datasets.add(ds);
+            for (const p of writtenBy[ds] || []) {
+              upstream.add(p);
+              actors.add(p);
+            }
+            const down = downstreamFromDataset(ds);
+            down.datasets.forEach((x) => datasets.add(x));
+            down.actors.forEach((a) => actors.add(a));
+          }
+        }
+      }
+      return { datasets, actors, upstream, origin: id };
+    }
+
+    const allNodeIds = GRAPH.nodes.map((n) => n.id);
+    const allEdgeIds = GRAPH.edges.map((_, i) => "e" + i);
+
+    function applyHighlight(result) {
+      const hot = new Set([...(result.datasets || []), ...(result.actors || [])]);
+      nodes.update(allNodeIds.map((id) => {
+        const n = nodeById[id];
+        const on = hot.has(id);
+        return {
+          id,
+          color: {
+            background: on ? nodeColor(n) : "#1c2438",
+            border: on ? (id === result.origin ? "#ff6b4a" : nodeColor(n)) : "#2a334c",
+            highlight: { background: "#fff4d6", border: "#ff6b4a" },
+          },
+          font: { color: on ? "#e8edf7" : "#3d4a66", size: n.kind === "dataset" ? 13 : 11 },
+          size: on && n.kind === "dataset" ? 20 : n.kind === "dataset" ? 16 : on ? 12 : 9,
+        };
+      }));
+      edges.update(allEdgeIds.map((eid, i) => {
+        const e = GRAPH.edges[i];
+        const on = hot.has(e.from) && hot.has(e.to);
+        return {
+          id: eid,
+          color: { color: on ? (e.rel === "writes" ? "#f5c16c" : "#8b97b3") : "#1c2438", opacity: on ? 1 : 0.15 },
+          width: on ? 2 : 0.6,
+        };
+      }));
+    }
+
+    function resetHighlight() {
+      nodes.update(allNodeIds.map((id) => {
+        const n = nodeById[id];
+        return {
+          id,
+          color: { background: nodeColor(n), border: nodeColor(n) },
+          font: { color: "#e8edf7", size: n.kind === "dataset" ? 13 : 11 },
+          size: n.kind === "dataset" ? 18 : 11,
+        };
+      }));
+      edges.update(allEdgeIds.map((eid, i) => {
+        const e = GRAPH.edges[i];
+        return {
+          id: eid,
+          color: { color: e.rel === "writes" ? "#7d8aa8" : "#3a4563", opacity: 0.7 },
+          width: e.rel === "writes" ? 1.4 : 1,
+        };
+      }));
+    }
+
+    function renderPanel(id, result) {
+      const panel = document.getElementById("panel");
+      const node = nodeById[id];
+      const dsList = [...result.datasets].map((x) => nodeById[x]).filter(Boolean);
+      const actorList = [...result.actors].map((x) => nodeById[x]).filter(Boolean);
+      const upList = [...result.upstream].map((x) => nodeById[x]).filter(Boolean);
+      const hit = dsList.length + actorList.length;
+      const li = (n) =>
+        `<li data-id="${n.id}"><span class="kind">${n.kind}</span> ${n.label}${n.status === "shadow" ? " · shadow" : ""}</li>`;
+      panel.innerHTML = `
+        <div class="kind">${node.kind}${node.status ? " · " + node.status : ""}</div>
+        <h2>${node.label}</h2>
+        ${node.notes ? `<div class="notes">${node.notes}</div>` : ""}
+        <div>Blast radius: <span class="count">${hit}</span> node</div>
+        <h3>Hulu langsung (${upList.length})</h3>
+        <ul>${upList.length ? upList.map(li).join("") : "<li>—</li>"}</ul>
+        <h3>Dataset terkena (${dsList.length})</h3>
+        <ul>${dsList.map(li).join("")}</ul>
+        <h3>Producer / consumer terkena (${actorList.length})</h3>
+        <ul>${actorList.map(li).join("")}</ul>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--dataset)"></i>dataset</span>
+          <span><i class="swatch" style="background:var(--dag)"></i>DAG</span>
+          <span><i class="swatch" style="background:var(--api)"></i>API</span>
+          <span><i class="swatch" style="background:var(--telegram)"></i>Telegram</span>
+        </div>`;
+      panel.querySelectorAll("li[data-id]").forEach((el) => {
+        el.addEventListener("click", () => select(el.getAttribute("data-id")));
+      });
+    }
+
+    function select(id) {
+      const result = blast(id);
+      if (!result) return;
+      applyHighlight(result);
+      renderPanel(id, result);
+      network.selectNodes([id]);
+      network.focus(id, { scale: Math.max(network.getScale(), 0.85), animation: { duration: 250 } });
+    }
+
+    network.on("click", (params) => {
+      if (params.nodes.length) select(params.nodes[0]);
+    });
+
+    document.getElementById("clear").addEventListener("click", () => {
+      resetHighlight();
+      network.unselectAll();
+      document.getElementById("panel").innerHTML = `
+        <div class="empty">Klik sebuah titik. Hilir transitif dan hulu langsung akan menyala.</div>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--dataset)"></i>dataset</span>
+          <span><i class="swatch" style="background:var(--dag)"></i>DAG</span>
+          <span><i class="swatch" style="background:var(--api)"></i>API</span>
+          <span><i class="swatch" style="background:var(--telegram)"></i>Telegram</span>
+        </div>`;
+    });
+
+    document.getElementById("search").addEventListener("input", (ev) => {
+      const q = ev.target.value.trim().toLowerCase();
+      if (!q) return;
+      const hit = GRAPH.nodes.find((n) => n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q));
+      if (hit) select(hit.id);
+    });
+  </script>
+</body>
+</html>
